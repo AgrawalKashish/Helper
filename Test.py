@@ -1,50 +1,44 @@
-Below is an example Selenium Python script that automates the process:
-
-```
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+import time
 
-# Set up the webdriver
-driver = webdriver.Chrome()  # Replace with your preferred browser
+# Set up the WebDriver (ensure you have the correct driver for your browser)
+driver = webdriver.Chrome()  # Or use webdriver.Firefox() if using Firefox
 
-# Navigate to the link
-link = "your_link_here"
-driver.get(link)
+# Navigate to the webpage
+url = "YOUR_URL_HERE"
+driver.get(url)
 
-# Find the dropdown menu
-release_dropdown = WebDriverWait(driver, 10).until(
-    EC.presence_of_element_located((By.NAME, "release"))
-)
-select = Select(release_dropdown)
+# Wait for the page to load
+time.sleep(3)
 
-# Get the options from the dropdown menu
-options = select.options
+try:
+    # Locate the dropdown menu
+    dropdown_element = driver.find_element(By.CLASS_NAME, "jenkins-select_input")
+    
+    # Initialize Select class
+    dropdown = Select(dropdown_element)
+    
+    # Iterate over all options
+    for option in dropdown.options:
+        value = option.get_attribute("value")
+        print(f"Selecting: {value}")
 
-# Loop through each option and click the build button
-for option in options:
-    select.select_by_visible_text(option.text)
-    build_button = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.XPATH, "//button[text()='Build']"))
-    )
-    build_button.click()
-    # Wait for the build process to complete or add a timeout
-    try:
-        WebDriverWait(driver, 10).until(
-            EC.invisibility_of_element_located((By.XPATH, "//button[text()='Build']"))
-        )
-    except TimeoutException:
-        pass
-```
+        # Select the option
+        dropdown.select_by_value(value)
 
-Make sure to:
+        # Click the "Build" button
+        build_button = driver.find_element(By.XPATH, "//button[text()='Build']")  # Adjust if needed
+        build_button.click()
 
-1. Replace `"your_link_here"` with the actual link.
-2. Adjust the `NAME` attribute in `release_dropdown` to match the actual HTML attribute.
-3. Update the `XPATH` attribute in `build_button` to match the actual HTML structure.
-4. Add error handling and timeouts as needed.
+        print(f"Triggered build for: {value}")
 
-Please note that this script assumes that the build process completes within a certain time frame. You may need to adjust the timeouts or add additional logic to handle different scenarios.
+        # Wait a bit before proceeding to the next option
+        time.sleep(5)  
+
+except Exception as e:
+    print("Error:", e)
+
+# Close the browser
+driver.quit()
