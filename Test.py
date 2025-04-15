@@ -1,44 +1,69 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
-import time
+#!/usr/bin/env python3
+import sys
+import argparse
+from git import Repo, exc
 
-# Set up the WebDriver (ensure you have the correct driver for your browser)
-driver = webdriver.Chrome()  # Or use webdriver.Firefox() if using Firefox
+def compare_commits(repo, branch1, branch2):
+    """
+    Prints commits that are unique to each branch.
+    """
+    commits_in_branch2 = list(repo.iter_commits(f'{branch1}..{branch2}'))
+    commits_in_branch1 = list(repo.iter_commits(f'{branch2}..{branch1}'))
 
-# Navigate to the webpage
-url = "YOUR_URL_HERE"
-driver.get(url)
+    print(f"Commits in '{branch2}' that are not in '{branch1}':")
+    if commits_in_branch2:
+        for commit in commits_in_branch2:
+            print(f"  - {commit.hexsha[:7]}: {commit.summary}")
+    else:
+        print("  None")
 
-# Wait for the page to load
-time.sleep(3)
+    print(f"\nCommits in '{branch1}' that are not in '{branch2}':")
+    if commits_in_branch1:
+        for commit in commits_in_branch1:
+            print(f"  - {commit.hexsha[:7]}: {commit.summary}")
+    else:
+        print("  None")
 
-try:
-    # Locate the dropdown menu
-    dropdown_element = driver.find_element(By.CLASS_NAME, "jenkins-select_input")
-    
-    # Initialize Select class
-    dropdown = Select(dropdown_element)
-    
-    # Iterate over all options
-    for option in dropdown.options:
-        value = option.get_attribute("value")
-        print(f"Selecting: {value}")
+def compare_diff(repo, branch1, branch2):
+    """
+    Prints the diff between two branches.
+    """
+    print("\nDifferences between branches (unified diff):")
+    try:
+        diff = repo.git.diff(f"{branch1}...{branch2}", unified=3)
+        if diff:
+            print(diff)
+        else:
+            print("No differences found.")
+    except Exception as e:
+        print("Error generating diff:", e)
 
-        # Select the option
-        dropdown.select_by_value(value)
+def main():
+    parser = argparse.ArgumentParser(
+        description="Compare two Git branches by showing differences in commits and code."
+    )
+    parser.add_argument("branch1", help="First branch name")
+    parser.add_argument("branch2", help="Second branch name")
+    args = parser.parse_args()
 
-        # Click the "Build" button
-        build_button = driver.find_element(By.XPATH, "//button[text()='Build']")  # Adjust if needed
-        build_button.click()
+    try:
+        repo = Repo(".")
+    except exc.InvalidGitRepositoryError:
+        print("Error: Current directory is not a Git repository.")
+        sys.exit(1)
 
-        print(f"Triggered build for: {value}")
+    # Validate branch existence
+    branches = [head.name for head in repo.heads]
+    if args.branch1 not in branches:
+        print(f"Error: Branch '{args.branch1}' not found in the repository.")
+        sys.exit(1)
+    if args.branch2 not in branches:
+        print(f"Error: Branch '{args.branch2}' not found in the repository.")
+        sys.exit(1)
 
-        # Wait a bit before proceeding to the next option
-        time.sleep(5)  
+    print(f"Comparing branches '{args.branch1}' and '{args.branch2}'...\n")
+    compare_commits(repo, args.branch1, args.branch2)
+    compare_diff(repo, args.branch1, args.branch2)
 
-except Exception as e:
-    print("Error:", e)
-
-# Close the browser
-driver.quit()
+if __name__ == "__main__":
+    main()
