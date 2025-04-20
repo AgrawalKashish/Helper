@@ -1,12 +1,17 @@
 #!/usr/local/bin/python3
 # Modified by William Thomas & You
 # This script generates a report comparing two branches for one or more repositories.
-# It uses the branch names provided by the user (via command-line arguments) and accepts repository paths.
+# It uses the branch names provided by the user via command-line arguments
+# and accepts repository paths—only the repo path is passed to the comparison function.
 
 import os
 import re
 import subprocess
 import sys
+
+# Define global branch variables (placeholders)
+BASE_BRANCH = ""
+FEATURE_BRANCH = ""
 
 def run(cmd, cwd=None):
     if not cwd:
@@ -39,15 +44,17 @@ def parseDiff(diff):
 def compare(base, feature, cwd=None):
     code, out, err = runComparison(base, feature, cwd)
     if err:
-        print(err)
+        print("Error comparing branches:", err)
         return False
     return parseDiff(out)
 
 def getRepoName(cwd=None):
-    code, out, err = run("basename `git rev-parse --show-toplevel`", cwd)
-    if err:
-        return False
-    return out
+    # Run git command to get the top-level directory of the repository.
+    code, out, err = run("git rev-parse --show-toplevel", cwd)
+    if code != 0 or err:
+        return None
+    # Use Python's os.path.basename to extract the repository name.
+    return os.path.basename(out)
 
 def printComparisonReport(base, feature, repoName, files, insertions, deletions):
     print("Comparing %s ← %s (%s):" % (base, feature, repoName))
@@ -57,7 +64,7 @@ def printComparisonReport(base, feature, repoName, files, insertions, deletions)
     print("Total changes: %d" % (insertions + deletions))
     print("-" * 40)
 
-# Note: This function now takes only the repository path.
+# This function now takes only the repository path.
 def runComparisonForRepo(repo_path):
     repoName = getRepoName(repo_path)
     if not repoName:
@@ -80,7 +87,7 @@ if __name__ == "__main__":
         print("Usage: gitcompare BASE_BRANCH FEATURE_BRANCH [repo_directory ...]")
         sys.exit(1)
 
-    # Set the global branch names
+    # Update the global branch names from command-line arguments
     BASE_BRANCH = sys.argv[1]
     FEATURE_BRANCH = sys.argv[2]
 
@@ -103,5 +110,5 @@ if __name__ == "__main__":
         total_insertions = sum(r.get("insertions", 0) for r in results)
         total_deletions = sum(r.get("deletions", 0) for r in results)
         print("CUMULATIVE SUMMARY:")
-        printComparisonReport(BASE_BRANCH, FEATURE_BRANCH, "Total", total_files,
-                              total_insertions, total_deletions)
+        printComparisonReport(BASE_BRANCH, FEATURE_BRANCH, "Total",
+                              total_files, total_insertions, total_deletions)
