@@ -1,5 +1,7 @@
 #!/usr/local/bin/python3
-# Written by William Thomas (Modified by You)
+# Modified by William Thomas & You
+# This script generates a report comparing two branches for one or more repositories.
+# It uses the branch names provided by the user (via command-line arguments) and accepts repository paths.
 
 import os
 import re
@@ -9,7 +11,6 @@ import sys
 def run(cmd, cwd=None):
     if not cwd:
         cwd = os.getcwd()
-
     proc = subprocess.Popen(cmd,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
@@ -19,7 +20,7 @@ def run(cmd, cwd=None):
     return proc.returncode, stdout.decode('utf-8').strip(), stderr.decode('utf-8').strip()
 
 def runComparison(base, feature, cwd=None):
-    # Note: This command assumes that the desired branches exist as origin/branches.
+    # This command assumes that the branch names exist as origin/branches.
     cmd = "git --no-pager diff --stat origin/%s..origin/%s | tail -n 1" % (base, feature)
     return run(cmd, cwd)
 
@@ -56,41 +57,44 @@ def printComparisonReport(base, feature, repoName, files, insertions, deletions)
     print("Total changes: %d" % (insertions + deletions))
     print("-" * 40)
 
-def runComparisonForRepo(cwd, base, feature):
-    repoName = getRepoName(cwd)
+# Note: This function now takes only the repository path.
+def runComparisonForRepo(repo_path):
+    repoName = getRepoName(repo_path)
     if not repoName:
-        print("Not a git repository:", cwd)
+        print("Not a git repository:", repo_path)
         return None
 
-    result = compare(base, feature, cwd)
+    result = compare(BASE_BRANCH, FEATURE_BRANCH, repo_path)
     if not result:
         return None
 
     result["repo"] = repoName
-    printComparisonReport(base, feature, repoName, result['files'], result['insertions'], result['deletions'])
+    printComparisonReport(BASE_BRANCH, FEATURE_BRANCH, repoName,
+                          result['files'], result['insertions'], result['deletions'])
     return result
 
 if __name__ == "__main__":
     # Expect at least 2 arguments: BASE_BRANCH FEATURE_BRANCH
-    # Optionally, additional arguments indicate directories of repos to compare.
+    # Optionally, additional arguments indicate directory paths (each a Git repo).
     if len(sys.argv) < 3:
         print("Usage: gitcompare BASE_BRANCH FEATURE_BRANCH [repo_directory ...]")
         sys.exit(1)
 
-    base = sys.argv[1]
-    feature = sys.argv[2]
+    # Set the global branch names
+    BASE_BRANCH = sys.argv[1]
+    FEATURE_BRANCH = sys.argv[2]
 
-    # If no additional directory arguments provided, default to the current directory.
-    repo_dirs = sys.argv[3:] if len(sys.argv) > 3 else [os.getcwd()]
+    # Use provided repository paths or default to the current directory
+    repo_paths = sys.argv[3:] if len(sys.argv) > 3 else [os.getcwd()]
 
     results = []
-    for repo_dir in repo_dirs:
-        print("Processing repository at: %s" % repo_dir)
-        result = runComparisonForRepo(repo_dir, base, feature)
-        if result:
-            results.append(result)
+    for repo in repo_paths:
+        print("Processing repository at: %s" % repo)
+        res = runComparisonForRepo(repo)
+        if res:
+            results.append(res)
         else:
-            print("Failed to process repository at:", repo_dir)
+            print("Failed to process repository at:", repo)
         print()
 
     # If more than one repository was processed, print a cumulative summary.
@@ -99,4 +103,5 @@ if __name__ == "__main__":
         total_insertions = sum(r.get("insertions", 0) for r in results)
         total_deletions = sum(r.get("deletions", 0) for r in results)
         print("CUMULATIVE SUMMARY:")
-        printComparisonReport(base, feature, "Total", total_files, total_insertions, total_deletions)
+        printComparisonReport(BASE_BRANCH, FEATURE_BRANCH, "Total", total_files,
+                              total_insertions, total_deletions)
