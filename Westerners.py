@@ -1,15 +1,15 @@
 #!/usr/local/bin/python3
 # Modified by William Thomas & You
 # This script generates a report comparing two branches for one or more repositories.
-# It uses the branch names provided by the user via command-line arguments
-# and accepts repository paths—only the repo path is passed to the comparison function.
+# It uses branch names provided via command-line arguments and accepts repository paths—
+# only the repo path is passed to the comparison function.
 
 import os
 import re
 import subprocess
 import sys
 
-# Define global branch variables (placeholders)
+# Global branch variables (placeholders)
 BASE_BRANCH = ""
 FEATURE_BRANCH = ""
 
@@ -25,9 +25,15 @@ def run(cmd, cwd=None):
     return proc.returncode, stdout.decode('utf-8').strip(), stderr.decode('utf-8').strip()
 
 def runComparison(base, feature, cwd=None):
-    # This command assumes that the branch names exist as origin/branches.
-    cmd = "git --no-pager diff --stat origin/%s..origin/%s | tail -n 1" % (base, feature)
-    return run(cmd, cwd)
+    # Run git diff --stat without piping to tail.
+    cmd = "git --no-pager diff --stat origin/%s..origin/%s" % (base, feature)
+    retcode, output, err = run(cmd, cwd)
+    if retcode != 0:
+        return retcode, "", err
+    # Process output in Python: split by lines and take the last non-empty line.
+    lines = [line for line in output.splitlines() if line.strip()]
+    last_line = lines[-1] if lines else ""
+    return retcode, last_line, err
 
 def parseDiff(diff):
     regex = r"(\d+).*file[^\d]+(\d+).*insertion[^\d]+(\d+).*deletion"
@@ -49,11 +55,10 @@ def compare(base, feature, cwd=None):
     return parseDiff(out)
 
 def getRepoName(cwd=None):
-    # Run git command to get the top-level directory of the repository.
+    # Use Git to get the top-level directory and then os.path.basename.
     code, out, err = run("git rev-parse --show-toplevel", cwd)
     if code != 0 or err:
         return None
-    # Use Python's os.path.basename to extract the repository name.
     return os.path.basename(out)
 
 def printComparisonReport(base, feature, repoName, files, insertions, deletions):
@@ -64,7 +69,7 @@ def printComparisonReport(base, feature, repoName, files, insertions, deletions)
     print("Total changes: %d" % (insertions + deletions))
     print("-" * 40)
 
-# This function now takes only the repository path.
+# This function takes only the repository path.
 def runComparisonForRepo(repo_path):
     repoName = getRepoName(repo_path)
     if not repoName:
