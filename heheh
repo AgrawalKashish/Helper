@@ -1,0 +1,228 @@
+#!/usr/local/bin/python3
+# -*- coding: utf-8 -*-
+# Modified by William Thomas & You
+
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime
+
+# Optional: Import Colorama for ANSI color support
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)
+except ImportError:
+    # If Colorama is not installed, define a simple dummy class with needed attributes.
+    class DummyColors:
+        RESET_ALL = ""
+        CYAN = ""
+        YELLOW = ""
+        MAGENTA = ""
+        GREEN = ""
+        RED = ""
+        BLUE = ""
+    Fore = DummyColors()
+    Style = DummyColors()
+
+# Global branch variables (placeholders)
+BASE_BRANCH = ""
+FEATURE_BRANCH = ""
+REPORT_FILE = "branch_diff_report"  # The file will be saved with .txt extension.
+REPORT_FORMAT = "ansi"  # "ansi" for colored ANSI output; can extend later for "html"
+
+def run(cmd, cwd=None):
+    if not cwd:
+        cwd = os.getcwd()
+    proc = subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            shell=True,
+                            cwd=cwd)
+    stdout, stderr = proc.communicate()
+    return proc.returncode, stdout.decode('utf-8').strip(), stderr.decode('utf-8').strip()
+
+def runComparison(base, feature, cwd=None):
+    cmd = "git --no-pager diff --stat origin/{}..origin/{}".format(base, feature)
+    retcode, output, err = run(cmd, cwd)
+    if retcode != 0:
+        return retcode, "", err
+    # Get the last non-empty line from the diff stat output
+    lines = [line for line in output.splitlines() if line.strip()]
+    last_line = lines[-1] if lines else ""
+    return retcode, last_line, err
+
+def parseDiff(diff):
+    # Use regex to extract file count, insertions and deletions from the summary
+    regex = r"(\d+).*file[^\d]+(\d+).*insertion[^\d]+(\d+).*deletion"
+    matches = re.finditer(regex, diff, re.MULTILINE)
+    for match in matches:
+        if len(match.groups()) == 3:
+            return {
+                "files": int(match.group(1)),
+                "insertions": int(match.group(2)),
+                "deletions": int(match.group(3)),
+            }
+    return False
+
+def compare(base, feature, cwd=None):
+    code, out, err = runComparison(base, feature, cwd)
+    if err:
+        print("Error comparing branches:", err)
+        return False
+    return parseDiff(out)
+
+def getRepoName(cwd=None):
+    code, out, err = run("git rev-parse --show-toplevel", cwd)
+    if code != 0 or err:
+        return None
+    return os.path.basename(out)
+
+def getChangedFileDiffs(base, feature, cwd=None):
+    """
+    Returns a list of dictionaries containing:
+      - status: the status of the change (e.g., M, A, D)
+      - filename: the file name/path
+      - diff: the diff text for that file between the two branches.
+    """
+    cmd = "git diff --name-status origin/{}..origin/{}".format(base, feature)
+    retcode, output, err = run(cmd, cwd)
+    if retcode != 0:
+        return []
+    changes = []
+    for line in output.splitlines():
+        if line.strip():
+            # Expecting output format: STATUS <TAB> filename
+            parts = line.split('\t', 1)
+            if len(parts) == 2:
+                status, filename = parts
+                diff_cmd = "git diff origin/{}..origin/{} -- {}".format(base, feature, filename)
+                ret, file_diff, err_diff = run(diff_cmd, cwd)
+                changes.append({
+                    "status": status,
+                    "filename": filename,
+                    "diff": file_diff
+                })
+    return changes
+
+def printComparisonReport(base, feature, repoName, files, insertions, deletions):
+    # Print report summary using ANSI colors to the terminal.
+    if REPORT_FORMAT == "ansi":
+        header = f"{Fore.CYAN}Comparing {base} {Fore.YELLOW}←{Fore.CYAN} {feature} ({repoName}){Style.RESET_ALL}"
+        files_str = f"{Fore.MAGENTA}Files changed:{Style.RESET_ALL} {files}"
+        add_str = f"{Fore.GREEN}Additions:{Style.RESET_ALL} {insertions}"
+        del_str = f"{Fore.RED}Deletions:{Style.RESET_ALL} {deletions}"
+        total_str = f"{Fore.BLUE}Total changes:{Style.RESET_ALL} {insertions + deletions}"
+        print(header)
+        print(files_str)
+        print(add_str)
+        print(del_str)
+        print(total_str)
+        print("-" * 40)
+    else:
+        print("Comparing {} ← {} ({}):".format(base, feature, repoName))
+        print("Files changed: {}".format(files))
+        print("Additions: {}".format(insertions))
+        print("Deletions: {}".format(deletions))
+        print("Total changes: {}".format(insertions + deletions))
+        print("-" * 40)
+
+def writeReport(results):
+    if REPORT_FORMAT == "ansi":
+        try:
+            with open(REPORT_FILE + ".txt", 'w', encoding='utf-8') as report:
+                # Define ANSI escape codes
+                red = "\033[31m"
+                green = "\033[32m"
+                reset = "\033[0m"
+
+                # Write the report header with colored branch names
+                header = ("Branch Comparison Report ({}{}{} ← {}{}{})\n"
+                          .format(red, BASE_BRANCH, reset,
+                                  green, FEATURE_BRANCH, reset))
+                report.write(header)
+                report.write("Generated on: {}\n\n".format(datetime.now()))
+
+                for result in results:
+                    report.write("Repository: {}\n".format(result.get("repo", "Unknown")))
+                    report.write("Files changed: {}\n".format(result.get("files", 0)))
+                    report.write("Additions: {}\n".format(result.get("insertions", 0)))
+                    report.write("Deletions: {}\n".format(result.get("deletions", 0)))
+                    report.write("Changed files and differences:\n")
+                    for change in result.get("changed_files", []):
+                        report.write("  Status: {} - File: {}\n".format(change.get("status", ""), change.get("filename", "")))
+                        report.write("  Diff:\n")
+                        diff_text = change.get("diff", "")
+                        # Process each diff line
+                        for line in diff_text.splitlines():
+                            if line.startswith('+'):
+                                report.write(green + line + reset + "\n")
+                            elif line.startswith('-'):
+                                report.write(red + line + reset + "\n")
+                            else:
+                                report.write(line + "\n")
+                        report.write("  " + "-" * 20 + "\n")
+                    report.write("-" * 40 + "\n")
+
+                if len(results) > 1:
+                    total_files = sum(r.get("files", 0) for r in results)
+                    total_insertions = sum(r.get("insertions", 0) for r in results)
+                    total_deletions = sum(r.get("deletions", 0) for r in results)
+                    report.write("\nCUMULATIVE SUMMARY:\n")
+                    report.write("Files changed: {}\n".format(total_files))
+                    report.write("Additions: {}\n".format(total_insertions))
+                    report.write("Deletions: {}\n".format(total_deletions))
+    
+            print("Detailed report saved to {}.txt".format(REPORT_FILE))
+        except Exception as e:
+            print("Error while writing report: {}".format(e))
+    else:
+        # For HTML mode, another implementation would go here.
+        pass
+
+def runComparisonForRepo(repo_path):
+    repoName = getRepoName(repo_path)
+    if not repoName:
+        print("Not a git repository:", repo_path)
+        return None
+
+    result = compare(BASE_BRANCH, FEATURE_BRANCH, repo_path)
+    if not result:
+        return None
+
+    result["repo"] = repoName
+    # Get file-level diff details for this repository.
+    result["changed_files"] = getChangedFileDiffs(BASE_BRANCH, FEATURE_BRANCH, repo_path)
+    printComparisonReport(BASE_BRANCH, FEATURE_BRANCH, repoName,
+                          result.get('files', 0), result.get('insertions', 0), result.get('deletions', 0))
+    return result
+
+if __name__ == "__main__":
+    # Usage: gitcompare BASE_BRANCH FEATURE_BRANCH [repo_directory ...]
+    if len(sys.argv) < 3:
+        print("Usage: gitcompare BASE_BRANCH FEATURE_BRANCH [repo_directory ...]")
+        sys.exit(1)
+
+    BASE_BRANCH = sys.argv[1]
+    FEATURE_BRANCH = sys.argv[2]
+    repo_paths = sys.argv[3:] if len(sys.argv) > 3 else [os.getcwd()]
+
+    results = []
+    for repo in repo_paths:
+        print("Processing repository at: {}".format(repo))
+        res = runComparisonForRepo(repo)
+        if res:
+            results.append(res)
+        else:
+            print("Failed to process repository at:", repo)
+        print()
+
+    if len(results) > 1:
+        total_files = sum(r.get("files", 0) for r in results)
+        total_insertions = sum(r.get("insertions", 0) for r in results)
+        total_deletions = sum(r.get("deletions", 0) for r in results)
+        print("CUMULATIVE SUMMARY:")
+        printComparisonReport(BASE_BRANCH, FEATURE_BRANCH, "Total",
+                              total_files, total_insertions, total_deletions)
+
+    writeReport(results)
