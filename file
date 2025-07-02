@@ -1,0 +1,83 @@
+**User Manual for Skill Forge (Layman Version)**
+
+---
+
+### **Welcome to Skill Forge!**
+
+Skill Forge is a platform that allows you to submit, manage, and subscribe to skill-based tasks. This manual will guide you through logging in, understanding the task lifecycle, and creating new tasks.
+
+---
+
+### **Accessing the Application**
+
+* **Link to Application:** [https://skillforge.company.com](https://skillforge.company.com)
+* **Login:** Use your official email credentials to log in.
+* **Outlook Access Permission:** You will be prompted to allow Outlook access — this is necessary for sending notifications and integrating your calendar. Please click **"Allow"** when prompted.
+
+---
+
+### **Dashboard Overview**
+
+Once logged in, you’ll see a dashboard with four main sections representing task instances:
+
+1. **Open** – Tasks that have been submitted and are available for others to subscribe.
+2. **Created** – Tasks you have created.
+3. **Assigned** – Tasks that have been assigned to you.
+4. **Drafts** – Tasks you started but have not submitted yet.
+
+*(Include screenshot of dashboard here)*
+
+---
+
+### **Creating a New Task**
+
+To create a new task, click the **"Submit New"** button.
+
+*(Insert screenshot of 'Submit New' button)*
+
+You will be redirected to the **Create Task** page.
+
+#### **Fields in Create Task Page:**
+
+##### **Non-changeable Field**
+
+* **Creator Email** – Automatically filled based on your login.
+
+##### **Compulsory Fields**
+
+1. **Title** – Short name of the task.
+2. **Description** – Detailed explanation of what the task involves.
+3. **Estimated Efforts** – Must be a number greater than 0, indicating expected work effort.
+4. **Software Required** – Mention tools or platforms needed.
+5. **Skill Required** – List down the required technical or domain skills.
+6. **Target Date** – Select a valid target completion date.
+7. **SME Contact (KID)** – Subject Matter Expert contact ID.
+8. **Type of Task** – Choose from predefined options like "POC" or "Else".
+9. **Complexity** – Select from options: Low, Medium, or High.
+10. **Attachments** – Upload documents or materials that support the task.
+11. **Terms and Conditions** – Toggle **ON** to agree.
+
+*(Insert screenshot of Create Task form here)*
+
+##### **Optional Fields**
+
+1. **Reference Links** – Any useful reference URLs.
+2. **Alternate Contact** – Additional point of contact.
+3. **App ID** – Internal application identifier if applicable.
+
+---
+
+### **Saving or Submitting the Task**
+
+* Click **"Submit"** to publish your task to the "Open" pool.
+* Click **"Save Draft"** if you want to complete or edit later.
+
+*(Insert screenshot of submit and save draft buttons)*
+
+---
+
+That’s it! You’re ready to navigate Skill Forge with ease. Happy task managing!
+
+---
+
+*For queries, reach out to your support team at [support@skillforge.com](mailto:support@skillforge.com).*
