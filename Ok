@@ -1,0 +1,159 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+
+// Assuming these are your actual classes and enums. Adjust imports if necessary.
+import com.wellsfrago.epo.mop.clearingSystem.ClearingSystem;
+import com.wellsfrago.epo.mop.clearingSystem.SoaMOPClearingSystemService;
+import com.wellsfrago.epo.mop.clearingSystem.RoaMOPClearingSystemService; // Add this import
+import com.wellsfrago.epo.instantpayment.core.enrich.ClearingNetworkEnricher;
+import com.wellsfrago.epo.instantpayment.core.model.InstantPayment;
+import com.wellsfrago.epo.instantpayment.core.model.Upo;
+import com.wellsfrago.epo.instantpayment.core.model.WfPmtOrdrPrcg;
+
+@ExtendWith(MockitoExtension.class)
+class ClearingNetworkEnricherTest {
+
+    @Mock
+    private SoaMOPClearingSystemService soaClearingNetworkService; // Renamed to clarify
+    @Mock
+    private RoaMOPClearingSystemService roaClearingNetworkService; // New mock for ROA service
+
+    // We will manually inject/instantiate in each test to control 'isSoaEnabled'
+    private ClearingNetworkEnricher clearingNetworkEnricher;
+
+    // Helper method to create an InstantPayment object with necessary nested objects
+    private InstantPayment createMockInstantPayment() {
+        InstantPayment ip = InstantPayment.builder()
+                .upo(new Upo())
+                .build();
+        ip.getUpo().setWfPmtOrdrPrcg(new WfPmtOrdrPrcg());
+        return ip;
+    }
+
+    @Test
+    void shouldEnrichUsingSoaServiceWhenSoaIsEnabledAndDerivationSucceeds() throws Exception {
+        // GIVEN: isSoaEnabled = true, SOA service returns a valid ClearingSystem
+        // Instantiate ClearingNetworkEnricher with isSoaEnabled = true
+        clearingNetworkEnricher = new ClearingNetworkEnricher(soaClearingNetworkService, roaClearingNetworkService /*, true */);
+        // NOTE: If isSoaEnabled is *only* @Value, you would need reflection here:
+        // Field isSoaEnabledField = ClearingNetworkEnricher.class.getDeclaredField("isSoaEnabled");
+        // isSoaEnabledField.setAccessible(true);
+        // isSoaEnabledField.set(clearingNetworkEnricher, true);
+
+
+        InstantPayment ip = createMockInstantPayment();
+        ClearingSystem mockClearingSystem = ClearingSystem.FEDNOW;
+        String expectedClearingNetworkValue = "FEDNOW";
+
+        when(soaClearingNetworkService.deriveClearingSystem(any(InstantPayment.class)))
+            .thenReturn(mockClearingSystem);
+
+        // WHEN
+        clearingNetworkEnricher.enrich(ip);
+
+        // THEN
+        // Verify SOA service was called, and ROA service was NOT called
+        verify(soaClearingNetworkService).deriveClearingSystem(ip);
+        verify(roaClearingNetworkService, never()).deriveClearingSystem(any());
+
+        assertNotNull(ip.getUpo().getWfPmtOrdrPrcg());
+        assertEquals(expectedClearingNetworkValue, ip.getUpo().getWfPmtOrdrPrcg().getWfClearingNetwork(),
+                "wfClearingNetwork should be set by SOA service.");
+    }
+
+    @Test
+    void shouldNotEnrichUsingSoaServiceWhenSoaIsEnabledAndDerivationFails() throws Exception {
+        // GIVEN: isSoaEnabled = true, SOA service returns null
+        clearingNetworkEnricher = new ClearingNetworkEnricher(soaClearingNetworkService, roaClearingNetworkService /*, true */);
+        // If using reflection:
+        // Field isSoaEnabledField = ClearingNetworkEnricher.class.getDeclaredField("isSoaEnabled");
+        // isSoaEnabledField.setAccessible(true);
+        // isSoaEnabledField.set(clearingNetworkEnricher, true);
+
+        InstantPayment ip = createMockInstantPayment();
+        ip.getUpo().getWfPmtOrdrPrcg().setWfClearingNetwork(null); // Ensure initial state
+
+        when(soaClearingNetworkService.deriveClearingSystem(any(InstantPayment.class)))
+            .thenReturn(null);
+
+        // WHEN
+        clearingNetworkEnricher.enrich(ip);
+
+        // THEN
+        verify(soaClearingNetworkService).deriveClearingSystem(ip);
+        verify(roaClearingNetworkService, never()).deriveCleivingSystem(any()); // ROA should not be called
+
+        assertNotNull(ip.getUpo().getWfPmtOrdrPrcg());
+        assertNull(ip.getUpo().getWfPmtOrdrPrcg().getWfClearingNetwork(),
+                "wfClearingNetwork should remain null when SOA derivation fails.");
+    }
+
+    @Test
+    void shouldEnrichUsingRoaServiceWhenSoaIsDisabledAndDerivationSucceeds() throws Exception {
+        // GIVEN: isSoaEnabled = false, ROA service returns a valid ClearingSystem
+        clearingNetworkEnricher = new ClearingNetworkEnricher(soaClearingNetworkService, roaClearingNetworkService /*, false */);
+        // If using reflection:
+        // Field isSoaEnabledField = ClearingNetworkEnricher.class.getDeclaredField("isSoaEnabled");
+        // isSoaEnabledField.setAccessible(true);
+        // isSoaEnabledField.set(clearingNetworkEnricher, false);
+
+        InstantPayment ip = createMockInstantPayment();
+        ClearingSystem mockClearingSystem = ClearingSystem.OTHER_CLEARING_SYSTEM; // Using a different system for ROA
+        String expectedClearingNetworkValue = "OTHER_SYSTEM"; // Expected value for ROA
+
+        when(roaClearingNetworkService.deriveClearingSystem(any(InstantPayment.class)))
+            .thenReturn(mockClearingSystem);
+        // Ensure that mockClearingSystem.getClearingNetwork() would return "OTHER_SYSTEM"
+
+        // WHEN
+        clearingNetworkEnricher.enrich(ip);
+
+        // THEN
+        // Verify ROA service was called, and SOA service was NOT called
+        verify(roaClearingNetworkService).deriveClearingSystem(ip);
+        verify(soaClearingNetworkService, never()).deriveClearingSystem(any());
+
+        assertNotNull(ip.getUpo().getWfPmtOrdrPrcg());
+        assertEquals(expectedClearingNetworkValue, ip.getUpo().getWfPmtOrdrPrcg().getWfClearingNetwork(),
+                "wfClearingNetwork should be set by ROA service.");
+    }
+
+    @Test
+    void shouldNotEnrichUsingRoaServiceWhenSoaIsDisabledAndDerivationFails() throws Exception {
+        // GIVEN: isSoaEnabled = false, ROA service returns null
+        clearingNetworkEnricher = new ClearingNetworkEnricher(soaClearingNetworkService, roaClearingNetworkService /*, false */);
+        // If using reflection:
+        // Field isSoaEnabledField = ClearingNetworkEnricher.class.getDeclaredField("isSoaEnabled");
+        // isSoaEnabledField.setAccessible(true);
+        // isSoaEnabledField.set(clearingNetworkEnricher, false);
+
+        InstantPayment ip = createMockInstantPayment();
+        ip.getUpo().getWfPmtOrdrPrcg().setWfClearingNetwork(null); // Ensure initial state
+
+        when(roaClearingNetworkService.deriveClearingSystem(any(InstantPayment.class)))
+            .thenReturn(null);
+
+        // WHEN
+        clearingNetworkEnricher.enrich(ip);
+
+        // THEN
+        verify(roaClearingNetworkService).deriveClearingSystem(ip);
+        verify(soaClearingNetworkService, never()).deriveClearingSystem(any()); // SOA should not be called
+
+        assertNotNull(ip.getUpo().getWfPmtOrdrPrcg());
+        assertNull(ip.getUpo().getWfPmtOrdrPrcg().getWfClearingNetwork(),
+                "wfClearingNetwork should remain null when ROA derivation fails.");
+    }
+}
